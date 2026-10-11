@@ -1,13 +1,13 @@
 name: Build Ghostscript
 
 # Self-contained Ghostscript (PostScript interpreter only, no PDF/PCL/XPS
-# readers) for GMT.jl. Every run uploads the tarballs as workflow artifacts;
-# pushing a tag v* also publishes them, plus an Artifacts.toml, as a release.
+# readers) for GMT.jl. Every run uploads the tarballs as workflow artifacts.
+# Every push to master publishes them, plus an Artifacts.toml, as release
+# v<Ghostscript version>-<run number>, and deletes all previous releases.
 
 on:
   push:
     branches: [master]
-    tags: ['v*']
   pull_request:
   workflow_dispatch:
 
@@ -98,11 +98,19 @@ jobs:
           path: dist/*.tar.gz
 
   release:
-    if: startsWith(github.ref, 'refs/tags/v')
+    if: github.event_name == 'push' && github.ref == 'refs/heads/master'
     needs: [windows, linux, macos]
     runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ github.token }}
+      REPO: ${{ github.repository }}
     steps:
       - uses: actions/checkout@v4
+      - name: Version
+        id: ver
+        run: |
+          VER="$(sed -n 's/^GS_VERSION_MAJOR=//p' base/version.mak).$(sed -n 's/^GS_VERSION_MINOR=//p' base/version.mak).$(sed -n 's/^GS_VERSION_PATCH=//p' base/version.mak)"
+          echo "tag=v$(echo "$VER" | tr -d '\r')-${{ github.run_number }}" >> "$GITHUB_OUTPUT"
       - uses: actions/download-artifact@v4
         with:
           path: dist
@@ -113,10 +121,16 @@ jobs:
       - name: Artifacts.toml
         run: |
           julia ci/artifacts-toml.jl dist \
-            "https://github.com/${{ github.repository }}/releases/download/${{ github.ref_name }}" \
+            "https://github.com/$REPO/releases/download/${{ steps.ver.outputs.tag }}" \
             > dist/Artifacts.toml
           cat dist/Artifacts.toml
       - name: Publish release
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: gh release create "${{ github.ref_name }}" dist/* --title "${{ github.ref_name }}" --notes "Self-contained Ghostscript, PostScript interpreter only (no PDF/PCL/XPS readers). Artifacts.toml entries for GMT.jl attached."
+        run: gh release create "${{ steps.ver.outputs.tag }}" dist/* -R "$REPO" --target "${{ github.sha }}" --latest --title "${{ steps.ver.outputs.tag }}" --notes "Self-contained Ghostscript, PostScript interpreter only (no PDF/PCL/XPS readers). Artifacts.toml entries for GMT.jl attached."
+      - name: Delete the previous releases
+        run: |
+          gh release list -R "$REPO" --limit 1000 --json tagName -q '.[].tagName' |
+          while read -r t; do
+            [ "$t" = "${{ steps.ver.outputs.tag }}" ] && continue
+            echo "deleting $t"
+            gh release delete "$t" -R "$REPO" --yes --cleanup-tag
+          done
