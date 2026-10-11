@@ -1,0 +1,122 @@
+name: Build Ghostscript
+
+# Self-contained Ghostscript (PostScript interpreter only, no PDF/PCL/XPS
+# readers) for GMT.jl. Every run uploads the tarballs as workflow artifacts;
+# pushing a tag v* also publishes them, plus an Artifacts.toml, as a release.
+
+on:
+  push:
+    branches: [master]
+    tags: ['v*']
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ilammy/msvc-dev-cmd@v1
+        with:
+          arch: x64
+      - name: Build
+        shell: cmd
+        # MAKEDLL=0: one gswin64c.exe with the static CRT (/MT), no gsdll64.dll.
+        run: nmake -f psi\msvc.mak WIN64= DEVSTUDIO= MAKEDLL=0 BUILD_PDF=0 BUILD_PCL=0 BUILD_XPS=0 BUILD_GPDL=0 gs
+      - name: Dependencies
+        shell: cmd
+        run: dumpbin /dependents bin\gswin64c.exe
+      - name: Smoke test
+        shell: bash
+        run: bash ci/smoke-test.sh bin/gswin64c.exe
+      - name: Package
+        shell: bash
+        run: |
+          VER="$(sed -n 's/^GS_VERSION_MAJOR=//p' base/version.mak).$(sed -n 's/^GS_VERSION_MINOR=//p' base/version.mak).$(sed -n 's/^GS_VERSION_PATCH=//p' base/version.mak)"
+          VER="$(echo "$VER" | tr -d '\r')"
+          mkdir -p _stage/bin _stage/share/licenses/ghostscript dist
+          cp bin/gswin64c.exe _stage/bin/
+          cp LICENSE _stage/share/licenses/ghostscript/
+          tar -C _stage -czf "dist/gs-$VER-windows-x86_64.tar.gz" .
+      - uses: actions/upload-artifact@v4
+        with:
+          name: gs-windows-x86_64
+          path: dist/*.tar.gz
+
+  linux:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: ubuntu-24.04
+            image: quay.io/pypa/manylinux2014_x86_64
+            plat: linux-x86_64
+          - runner: ubuntu-24.04-arm
+            image: quay.io/pypa/manylinux2014_aarch64
+            plat: linux-aarch64
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@v4
+      # manylinux2014 = CentOS 7, glibc 2.17: the binary runs on old distros.
+      # Run the container by hand: actions inside it would need a newer glibc.
+      - name: Build in manylinux2014
+        run: |
+          docker run --rm -v "$PWD:/src" -w /src ${{ matrix.image }} bash -c \
+            "yum -y -q install autoconf automake libtool && bash ci/build-unix.sh ${{ matrix.plat }} /src/dist"
+      - name: Smoke test on the host (newer distro)
+        run: |
+          mkdir -p t && tar -C t -xzf dist/*.tar.gz
+          bash ci/smoke-test.sh t/bin/gs
+      - uses: actions/upload-artifact@v4
+        with:
+          name: gs-${{ matrix.plat }}
+          path: dist/*.tar.gz
+
+  macos:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: macos-15-intel
+            plat: macos-x86_64
+          - runner: macos-14
+            plat: macos-aarch64
+    runs-on: ${{ matrix.runner }}
+    env:
+      MACOSX_DEPLOYMENT_TARGET: '11.0'
+    steps:
+      - uses: actions/checkout@v4
+      - run: brew install autoconf automake libtool
+      - name: Build
+        run: bash ci/build-unix.sh ${{ matrix.plat }} "$PWD/dist"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: gs-${{ matrix.plat }}
+          path: dist/*.tar.gz
+
+  release:
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: [windows, linux, macos]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+      - uses: julia-actions/setup-julia@v2
+        with:
+          version: '1'
+      - name: Artifacts.toml
+        run: |
+          julia ci/artifacts-toml.jl dist \
+            "https://github.com/${{ github.repository }}/releases/download/${{ github.ref_name }}" \
+            > dist/Artifacts.toml
+          cat dist/Artifacts.toml
+      - name: Publish release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release create "${{ github.ref_name }}" dist/* --title "${{ github.ref_name }}" --notes "Self-contained Ghostscript, PostScript interpreter only (no PDF/PCL/XPS readers). Artifacts.toml entries for GMT.jl attached."

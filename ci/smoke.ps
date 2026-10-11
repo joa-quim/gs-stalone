@@ -1,0 +1,14 @@
+%!PS-Adobe-3.0
+%%BoundingBox: 0 0 200 200
+%%Pages: 1
+%%EndComments
+% Smoke test: path fill, stroke and text, the things GMT's psconvert needs.
+%%Page: 1 1
+0.2 0.4 0.8 setrgbcolor
+newpath 20 20 moveto 180 20 lineto 100 160 lineto closepath fill
+0 setgray 2 setlinewidth
+newpath 10 10 moveto 190 10 lineto 190 190 lineto 10 190 lineto closepath stroke
+/Helvetica findfont 18 scalefont setfont
+40 170 moveto (Ghostscript) show
+showpage
+%%EOF

@@ -1,0 +1,7 @@
+%!PS
+% All 35 standard PostScript fonts must come from the binary itself (%rom%), unsubstituted.
+/y 780 def
+[/Courier /Courier-Bold /Courier-Oblique /Courier-BoldOblique /Helvetica /Helvetica-Bold /Helvetica-Oblique /Helvetica-BoldOblique /Helvetica-Narrow /Helvetica-Narrow-Bold /Helvetica-Narrow-Oblique /Helvetica-Narrow-BoldOblique /Times-Roman /Times-Bold /Times-Italic /Times-BoldItalic /AvantGarde-Book /AvantGarde-BookOblique /AvantGarde-Demi /AvantGarde-DemiOblique /Bookman-Light /Bookman-LightItalic /Bookman-Demi /Bookman-DemiItalic /NewCenturySchlbk-Roman /NewCenturySchlbk-Italic /NewCenturySchlbk-Bold /NewCenturySchlbk-BoldItalic /Palatino-Roman /Palatino-Italic /Palatino-Bold /Palatino-BoldItalic /Symbol /ZapfChancery-MediumItalic /ZapfDingbats]
+{ dup findfont 12 scalefont setfont 40 y moveto dup =string cvs show
+  findfont /FontName get == /y y 21 sub def } forall
+showpage
