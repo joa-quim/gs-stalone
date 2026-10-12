@@ -1,7 +1,7 @@
 name: Build Ghostscript
 
-# Self-contained Ghostscript (PostScript interpreter only, no PDF/PCL/XPS
-# readers) for GMT.jl. Every run uploads the tarballs as workflow artifacts.
+# Ghostscript for GMT.jl: small gs executable + shared libgs (PostScript
+# interpreter only, no PDF/PCL/XPS readers). Every run uploads the tarballs.
 # Every push to master publishes them, plus an Artifacts.toml, as release
 # v<Ghostscript version>-<run number>, and deletes all previous releases.
 
@@ -24,23 +24,29 @@ jobs:
           arch: x64
       - name: Build
         shell: cmd
-        # MAKEDLL=0: one gswin64c.exe with the static CRT (/MT), no gsdll64.dll.
-        run: nmake -f psi\msvc.mak WIN64= DEVSTUDIO= MAKEDLL=0 BUILD_PDF=0 BUILD_PCL=0 BUILD_XPS=0 BUILD_GPDL=0 gs
+        # Small gswin64c.exe + gsdll64.dll, both with the static CRT (/MT).
+        run: nmake -f psi\msvc.mak WIN64= DEVSTUDIO= MAKEDLL=1 CMT=/MT BUILD_PDF=0 BUILD_PCL=0 BUILD_XPS=0 BUILD_GPDL=0 gs
       - name: Dependencies
         shell: cmd
-        run: dumpbin /dependents bin\gswin64c.exe
-      - name: Smoke test
-        shell: bash
-        run: bash ci/smoke-test.sh bin/gswin64c.exe
+        run: dumpbin /dependents bin\gswin64c.exe bin\gsdll64.dll
       - name: Package
         shell: bash
         run: |
           VER="$(sed -n 's/^GS_VERSION_MAJOR=//p' base/version.mak).$(sed -n 's/^GS_VERSION_MINOR=//p' base/version.mak).$(sed -n 's/^GS_VERSION_PATCH=//p' base/version.mak)"
           VER="$(echo "$VER" | tr -d '\r')"
           mkdir -p _stage/bin _stage/share/licenses/ghostscript dist
-          cp bin/gswin64c.exe _stage/bin/
+          cp bin/gswin64c.exe bin/gsdll64.dll _stage/bin/
           cp LICENSE _stage/share/licenses/ghostscript/
           tar -C _stage -czf "dist/gs-$VER-windows-x86_64.tar.gz" .
+      - uses: julia-actions/setup-julia@v2
+        with:
+          version: '1'
+      - name: Test the package (exe + libgs)
+        shell: bash
+        run: |
+          mkdir -p t && tar -C t -xzf dist/*.tar.gz
+          bash ci/smoke-test.sh t/bin/gswin64c.exe
+          julia ci/libgs-test.jl t/bin/gsdll64.dll ci/smoke.ps
       - uses: actions/upload-artifact@v4
         with:
           name: gs-windows-x86_64
@@ -66,10 +72,14 @@ jobs:
         run: |
           docker run --rm -v "$PWD:/src" -w /src ${{ matrix.image }} bash -c \
             "yum -y -q install autoconf automake libtool && bash ci/build-unix.sh ${{ matrix.plat }} /src/dist"
-      - name: Smoke test on the host (newer distro)
+      - uses: julia-actions/setup-julia@v2
+        with:
+          version: '1'
+      - name: Test the package on the host (newer distro)
         run: |
           mkdir -p t && tar -C t -xzf dist/*.tar.gz
           bash ci/smoke-test.sh t/bin/gs
+          julia ci/libgs-test.jl t/bin/libgs.so ci/smoke.ps
       - uses: actions/upload-artifact@v4
         with:
           name: gs-${{ matrix.plat }}
@@ -92,6 +102,14 @@ jobs:
       - run: brew install autoconf automake libtool
       - name: Build
         run: bash ci/build-unix.sh ${{ matrix.plat }} "$PWD/dist"
+      - uses: julia-actions/setup-julia@v2
+        with:
+          version: '1'
+      - name: Test the package
+        run: |
+          mkdir -p t && tar -C t -xzf dist/*.tar.gz
+          bash ci/smoke-test.sh t/bin/gs
+          julia ci/libgs-test.jl t/bin/libgs.dylib ci/smoke.ps
       - uses: actions/upload-artifact@v4
         with:
           name: gs-${{ matrix.plat }}
