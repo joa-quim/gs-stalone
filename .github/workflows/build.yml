@@ -1,7 +1,8 @@
 name: Build Ghostscript
 
 # Ghostscript for GMT.jl: small gs executable + shared libgs (PostScript
-# interpreter only, no PDF/PCL/XPS readers). Every run uploads the tarballs.
+# + PDF interpreters, no PCL/XPS readers; psconvert converts PS with
+# transparency to PDF and then reads that PDF). Every run uploads the tarballs.
 # A push to master with a Ghostscript version that has no release yet publishes
 # them, plus an Artifacts.toml, as release v<version>. Releases are never deleted.
 
@@ -25,7 +26,7 @@ jobs:
       - name: Build
         shell: cmd
         # Small gswin64c.exe + gsdll64.dll, both with the static CRT (/MT).
-        run: nmake -f psi\msvc.mak WIN64= DEVSTUDIO= MAKEDLL=1 CMT=/MT BUILD_PDF=0 BUILD_PCL=0 BUILD_XPS=0 BUILD_GPDL=0 gs
+        run: nmake -f psi\msvc.mak WIN64= DEVSTUDIO= MAKEDLL=1 CMT=/MT BUILD_PCL=0 BUILD_XPS=0 BUILD_GPDL=0 gs
       - name: Dependencies
         shell: cmd
         run: dumpbin /dependents bin\gswin64c.exe bin\gsdll64.dll
@@ -157,4 +158,4 @@ jobs:
           cat dist/Artifacts.toml
       - name: Publish release
         if: steps.ver.outputs.new == 'true'
-        run: gh release create "${{ steps.ver.outputs.tag }}" dist/* -R "$REPO" --target "${{ github.sha }}" --latest --title "${{ steps.ver.outputs.tag }}" --notes "Ghostscript for GMT.jl: gs + shared libgs, PostScript interpreter only (no PDF/PCL/XPS readers). Artifacts.toml entries for GMT.jl attached."
+        run: gh release create "${{ steps.ver.outputs.tag }}" dist/* -R "$REPO" --target "${{ github.sha }}" --latest --title "${{ steps.ver.outputs.tag }}" --notes "Ghostscript for GMT.jl: gs + shared libgs, PostScript + PDF interpreters (no PCL/XPS readers). Artifacts.toml entries for GMT.jl attached."

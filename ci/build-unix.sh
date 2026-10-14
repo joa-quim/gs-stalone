@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Build Ghostscript as a small gs executable plus the shared libgs (PostScript
-# interpreter only, no PDF/PCL/XPS
+# + PDF interpreters, no PCL/XPS
 # readers), packed as <outdir>/gs-<version>-<platform>.tar.gz.
 #
 # Every third-party library (zlib, libpng, jpeg, freetype, lcms2, tiff, ...) is
@@ -22,7 +22,7 @@ echo "Ghostscript $VER for $PLAT"
 NOCONFIGURE=1 ./autogen.sh
 
 ./configure \
-    --without-pdf --without-pcl --without-xps --without-gpdl --without-urf \
+    --without-pcl --without-xps --without-gpdl --without-urf \
     --without-extract-dir --without-tesseract \
     --without-x --disable-cups --disable-gtk --disable-fontconfig --disable-dbus \
     --without-libidn --without-libpaper --without-ijs

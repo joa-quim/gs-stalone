@@ -26,6 +26,10 @@ grep -q '%%HiResBoundingBox' "$WORK/bbox.txt"
 test -s "$WORK/out.png"
 test -s "$WORK/out.pdf"
 
+# PDF as INPUT: psconvert's path for PS with transparency (PS -> PDF -> raster).
+"$GS" -q -dNOPAUSE -dBATCH -dSAFER -sDEVICE=png16m -r100 -o "$WORK/from_pdf.png" "$WORK/out.pdf"
+test -s "$WORK/from_pdf.png"
+
 # Fonts, ICC profiles and CMaps are compiled into the binary: nothing on disk.
 for d in Font CMap; do
     n="$("$GS" -q -dNODISPLAY -dNOSAFER -c "0 (%rom%Resource/$d/*) { pop 1 add } 512 string filenameforall == quit")"
