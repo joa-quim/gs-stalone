@@ -11,6 +11,11 @@ on:
     branches: [master]
   pull_request:
   workflow_dispatch:
+    inputs:
+      publish:
+        description: 'Publish a new release v<version>-<run number> even if this version has one'
+        type: boolean
+        default: false
 
 permissions:
   contents: write
@@ -117,7 +122,7 @@ jobs:
           path: dist/*.tar.gz
 
   release:
-    if: github.event_name == 'push' && github.ref == 'refs/heads/master'
+    if: (github.event_name == 'push' || inputs.publish) && github.ref == 'refs/heads/master'
     needs: [windows, linux, macos]
     runs-on: ubuntu-latest
     env:
@@ -133,6 +138,11 @@ jobs:
         run: |
           VER="$(sed -n 's/^GS_VERSION_MAJOR=//p' base/version.mak).$(sed -n 's/^GS_VERSION_MINOR=//p' base/version.mak).$(sed -n 's/^GS_VERSION_PATCH=//p' base/version.mak)"
           TAG="v$(echo "$VER" | tr -d '\r')"
+          if [ "${{ inputs.publish }}" = "true" ]; then
+            echo "tag=$TAG-${{ github.run_number }}" >> "$GITHUB_OUTPUT"
+            echo "new=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
           echo "tag=$TAG" >> "$GITHUB_OUTPUT"
           if gh release list -R "$REPO" --limit 1000 --json tagName -q '.[].tagName' | grep -qE "^${TAG//./\.}(-[0-9]+)?$"; then
             echo "A release of $TAG already exists: not publishing."
@@ -158,4 +168,5 @@ jobs:
           cat dist/Artifacts.toml
       - name: Publish release
         if: steps.ver.outputs.new == 'true'
-        run: gh release create "${{ steps.ver.outputs.tag }}" dist/* -R "$REPO" --target "${{ github.sha }}" --latest --title "${{ steps.ver.outputs.tag }}" --notes "Ghostscript for GMT.jl: gs + shared libgs, PostScript + PDF interpreters (no PCL/XPS readers). Artifacts.toml entries for GMT.jl attached."
+        run: |
+          gh release create "${{ steps.ver.outputs.tag }}" dist/* -R "$REPO" --target "${{ github.sha }}" --latest --title "${{ steps.ver.outputs.tag }}" --notes "Ghostscript for GMT.jl: gs + shared libgs, PostScript + PDF interpreters (no PCL/XPS readers). Artifacts.toml entries for GMT.jl attached."
